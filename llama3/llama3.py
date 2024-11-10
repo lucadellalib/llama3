@@ -1107,27 +1107,27 @@ def test_generation():
         print(time.time() - ts)
     print("-----------")
     print("With JIT")
-    jit_model = model.jit()
+    model_jit = model.jit()
     for i in range(4):
         print(f"Iteration {i}")
         ts = time.time()
         for i in range(2):
             # Generation
-            jit_model.generate(
+            model_jit.generate(
                 bos_toks,
                 eos_id,
                 prompt_embs=prompt_embs,
                 top_p=0.0,
                 use_kv_cache=False,
             )
-            jit_model.generate(
+            model_jit.generate(
                 bos_toks,
                 eos_id,
                 prompt_embs=prompt_embs,
                 top_p=0.0,
                 use_kv_cache=True,
             )
-            jit_model.generate(bos_toks, eos_id, prompt_embs=prompt_embs)
+            model_jit.generate(bos_toks, eos_id, prompt_embs=prompt_embs)
         torch.cuda.synchronize()
         print(time.time() - ts)
     print("-----------")
