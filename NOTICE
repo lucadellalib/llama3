@@ -1,0 +1,12 @@
+This project incorporates components from the projects listed below. The original copyright notices are set forth below.
+
+#############################################################################################################################################################
+
+1. Code in {llama3/llama3.py, main.py} adapted from:
+   https://github.com/meta-llama/llama3
+
+META LLAMA 3 COMMUNITY LICENSE AGREEMENT
+
+Meta Llama 3 is licensed under the Meta Llama 3 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.
+
+#############################################################################################################################################################
