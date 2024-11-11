@@ -53,7 +53,7 @@ print(output.shape)
 # JIT the model
 model_jit = model.jit()
 output_jit, state_jit = model_jit(input)
-print(output.shape)
+print(output_jit.shape)
 ```
 
 ### Inference Example With Pretrained Checkpoint
