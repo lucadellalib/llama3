@@ -361,8 +361,8 @@ class LlamaEncoder(nn.Module):
 
     This class implements a multi-layer encoder stack with grouped-query attention,
     feed-forward layers, and RMS normalization. It incorporates rotary positional
-    embeddings and optionally includes an embedding/projection layer for the input
-    and a projection layer for the output.
+    embeddings and optionally includes an embedding/projection layer for the input,
+    a projection layer for the output, and a projection layer for the prompt.
 
     Parameters
     ----------
@@ -395,6 +395,8 @@ class LlamaEncoder(nn.Module):
         controlling the frequency range of positional encoding.
     max_seq_len:
         The maximum sequence length supported by the positional embeddings.
+    prompt_dim:
+        The dimension of the prompt embeddings (optional).
     embedding_kwargs:
         Additional keyword arguments for the token embedding layer.
 
@@ -414,6 +416,7 @@ class LlamaEncoder(nn.Module):
         norm_eps: "float" = 1e-6,
         rope_theta: "float" = 10000.0,
         max_seq_len: "int" = 1024,
+        prompt_dim: "Optional[int]" = None,
         embedding_kwargs: "Optional[Dict[str, Any]]" = None,
         **kwargs: "Any",
     ) -> "None":
@@ -432,6 +435,7 @@ class LlamaEncoder(nn.Module):
         self.norm_eps = norm_eps
         self.rope_theta = rope_theta
         self.max_seq_len = max_seq_len
+        self.prompt_dim = prompt_dim
         self.embedding_kwargs = embedding_kwargs or {}
 
         # Modules
@@ -457,6 +461,8 @@ class LlamaEncoder(nn.Module):
         self.norm = RMSNorm(dim, norm_eps)
         if output_dim is not None:
             self.output = nn.Linear(dim, output_dim, bias=False)
+        if prompt_dim is not None:
+            self.prompt = nn.Linear(prompt_dim, dim, bias=False)
 
         # Non-persistent buffers
         self.register_buffer(
@@ -491,7 +497,7 @@ class LlamaEncoder(nn.Module):
             A tensor containing the input tokens. The tensor should have shape (batch_size, seq_length).
         prompt_embs:
             A tensor containing the prompt embeddings to prepend to the input tokens. The tensor should
-            have shape (batch_size, prompt_length, dim), where `prompt_length` is the length of the prompt
+            have shape (batch_size, prompt_length, prompt_dim), where `prompt_length` is the length of the prompt
             and `dim` is the embedding dimension. If `None`, no prompt embeddings are prepended.
 
         Returns
@@ -505,7 +511,10 @@ class LlamaEncoder(nn.Module):
         embs = self.tok_embeddings(toks)
         if prompt_embs is not None:
             assert embs.shape[0] == prompt_embs.shape[0]
-            # [B, P, H] + [B, T, H] = [B, P + T, H]
+            if self.prompt_dim is not None:
+                if prompt_embs.shape[-1] == self.prompt_dim:
+                    prompt_embs = self.prompt(prompt_embs)
+            # [B, M, H] + [B, T, H] = [B, M + T, H]
             embs = torch.cat([prompt_embs, embs], dim=-2)
         return embs
 
@@ -620,6 +629,8 @@ class LlamaDecoder(LlamaEncoder):
         controlling the frequency range of positional encoding.
     max_seq_len:
         The maximum sequence length supported by the positional embeddings.
+    prompt_dim:
+        The dimension of the prompt embeddings (optional).
     embedding_kwargs:
         Additional keyword arguments for the token embedding layer.
 
@@ -637,6 +648,7 @@ class LlamaDecoder(LlamaEncoder):
         norm_eps: "float" = 1e-6,
         rope_theta: "float" = 10000.0,
         max_seq_len: "int" = 1024,
+        prompt_dim: "Optional[int]" = None,
         embedding_kwargs: "Optional[Dict[str, Any]]" = None,
         **kwargs: "Any",
     ) -> "None":
@@ -652,6 +664,7 @@ class LlamaDecoder(LlamaEncoder):
             norm_eps=norm_eps,
             rope_theta=rope_theta,
             max_seq_len=max_seq_len,
+            prompt_dim=prompt_dim,
             embedding_kwargs=embedding_kwargs,
             **kwargs,
         )
@@ -765,7 +778,7 @@ class LlamaDecoder(LlamaEncoder):
             The token ID representing the EOS token. The generation process will stop when this token
             is generated.
         prompt_embs:
-            A tensor of shape (batch_size, prompt_length, dim) containing optional prompt embeddings
+            A tensor of shape (batch_size, prompt_length, prompt_dim) containing optional prompt embeddings
             to prepend to the BOS tokens. If provided, these embeddings will be used as context to
             guide the generation. If None, no prompt embeddings are included.
         max_gen_toks:
@@ -1007,15 +1020,15 @@ def test_generation():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    B, H, K = 3, 512, 30
-    model = LlamaDecoder(K).to(device)
+    B, H, K, P = 3, 512, 30, 80
+    model = LlamaDecoder(K, prompt_dim=P).to(device)
     print(model)
 
     bos_id = 0
     eos_id = 1
 
     bos_toks = torch.full((B, 1), bos_id, device=device)
-    prompt_embs = torch.ones(B, 10, H, device=device)
+    prompt_embs = torch.ones(B, 10, P, device=device)
 
     print("-----------")
     print("KV caching")
